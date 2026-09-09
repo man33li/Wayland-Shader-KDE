@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=WaylandShader
+GenericName=Desktop Shader and Color Settings
+Comment=Configure monitor shader selection, gamma, and saturation for KWin
+Exec=waylandshader-controller
+Icon=preferences-desktop-effects
+Terminal=false
+Categories=Qt;KDE;Settings;DesktopSettings;
+OnlyShowIn=KDE;
+StartupNotify=true

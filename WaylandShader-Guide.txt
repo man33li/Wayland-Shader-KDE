@@ -1,0 +1,266 @@
+WaylandShader — native RetroArch shaders for Wayland
+===================================================
+
+Implemented backend: KDE Plasma / KWin 6.6, using desktop OpenGL/EGL and
+librashader. This is an in-place compositor effect, not a Wine application,
+screen-capture viewer, or overlay window. niri, COSMIC, and GNOME remain target
+desktops; their native integrations are not implemented here.
+
+What works
+----------
+
+* Load real .slangp presets, including multipass shaders, lookup textures,
+  mipmaps, feedback, and previous-frame history through librashader.
+* Apply the preset only to selected monitors. Each selected output has its own
+  filter chain, history, frame counter, and render-size-dependent targets.
+* Adjust gamma and saturation independently per monitor, with a separate color
+  toggle. Color adjustments also work without a preset or with that monitor's
+  preset processing disabled.
+* Compile replacement presets on a worker thread in a shared private EGL
+  context, while retaining the current working preset.
+* Choose a preset, toggle processing, and edit declared shader parameters in
+  a native Qt settings window. Equivalent asynchronous D-Bus controls and a
+  JSON-printing command-line client are included.
+* Persist the selected preset, enablement, per-preset parameter overrides, and
+  monitor profiles keyed by KWin output UUID rather than monitor list position.
+  A failed preset load does not replace the current preset. A rendering failure
+  bypasses desktop processing rather than leaving a broken desktop image;
+  reload a working preset to recover.
+* Handle output resizing, fractional scaling, and output removal/addition.
+  Existing outputs can continue using their old chains while replacements load.
+
+Architecture
+------------
+
+KWin scene -> per-output sRGB intermediate -> optional librashader filter chain
+           -> optional per-monitor gamma/saturation -> color-managed presentation
+
+The effect never creates an overlay or intercepts application input. There is
+no PipeWire stream, portal permission, capture feedback loop, or CPU readback
+in the rendering path. Private shared EGL contexts isolate librashader's GL
+state from KWin; GPU fences order access to shared textures. Output textures
+are retained while the shader runtime can still reference them.
+
+The Nix package patches librashader 0.10.1 to release owned GL resources and
+initialize/reset temporal buffers correctly. It installs that library with a
+private libwaylandshader-rashader.so.2 name/SONAME, without replacing the
+system's librashader. The source patch is in
+patches/librashader-gl-lifetime.patch.
+
+Build and install on NixOS
+-------------------------
+
+Requirements: KWin 6.6 development files matching the installed compositor,
+Qt 6.10 or newer (including Qt's private development headers), KDE Frameworks,
+CMake, a C++20 compiler, libepoxy, desktop OpenGL/EGL, and the patched shader
+library. default.nix and shell.nix provide these dependencies.
+
+KWin's effect API is private and not binary-stable. Build against the same
+package set as the running KWin. CMake rejects KWin 6.7 or newer rather than
+pretending that the plugin is compatible. The dependency patch is explicitly
+restricted to librashader 0.10.1; updating it requires porting the patch.
+
+From this directory:
+
+    nix-build
+
+The result symlink contains the settings application, CLI, native KWin plugin,
+and this document. Building alone does not make the plugin discoverable by an
+already-running compositor.
+
+For installation, add the package to your NixOS configuration using its existing
+pkgs value, for example:
+
+    environment.systemPackages = [
+      (import /absolute/path/to/WaylandShader/default.nix { inherit pkgs; })
+    ];
+
+For a flake-based system, make this source available as a local flake input
+with flake = false and import that input instead of an inaccessible absolute
+path. Rebuild the system configuration, then log out and back in so Plasma's
+plugin search paths include the package. Save work before logging out. Do not
+replace or restart the live Wayland compositor to test a newly built plugin.
+
+Open WaylandShader from Plasma's application menu, or run:
+
+    waylandshader-controller
+
+The settings application can load the installed waylandshader effect itself;
+it does not restart KWin. Select a .slangp file and enable processing. Presets
+are not bundled: retain each preset's shader files, includes, and lookup
+textures in their original relative directory layout.
+
+Use the Monitor selector to choose which profile to edit. "Apply preset on this
+monitor" controls Slang processing; "Enable color adjustments" controls gamma
+and saturation independently. The top-level "Enable desktop effects" checkbox
+bypasses both without discarding their settings. Preset and shader parameters
+are shared; monitor selection and color settings are per-output.
+
+Gamma ranges from 0.1 to 5.0: 1.0 is neutral, greater values brighten, and lower
+values darken. Saturation ranges from 0.0 (grayscale) through 1.0 (neutral) to
+2.0. Adjustments run after the Slang preset: gamma operates on sRGB-encoded
+colors, then saturation uses linear-sRGB Rec.709 luminance, before KWin's output
+color conversion. Neutral gamma/saturation do not require a color-processing
+pass. Settings remain editable while their processing is bypassed.
+
+Command-line controls
+---------------------
+
+    waylandshaderctl status
+    waylandshaderctl parameters
+    waylandshaderctl outputs
+    waylandshaderctl load /absolute/path/to/preset.slangp
+    waylandshaderctl enable
+    waylandshaderctl param PARAMETER_NAME 0.5
+    waylandshaderctl disable
+    waylandshaderctl toggle
+    waylandshaderctl output DP-1 shader off
+    waylandshaderctl output DP-1 color on
+    waylandshaderctl output DP-1 gamma 1.1
+    waylandshaderctl output DP-1 saturation 0.8
+
+Use names and bounds returned by parameters, not PARAMETER_NAME literally.
+Replace DP-1 with an ID or unique exact name returned by outputs.
+status, parameters, and outputs are read-only: they do not load a missing effect.
+Mutation commands may load only the WaylandShader effect. Loading a preset
+preserves the current enablement setting. The load command waits for shader
+compilation; --timeout SECONDS controls its deadline (1–3600 seconds).
+
+Exit codes: 0 success; 1 rejected operation/shader failure; 2 usage error;
+3 unavailable effect, D-Bus transport, or protocol error; 4 timeout. A timed-out
+operation may still finish in KWin; inspect status rather than assuming it was
+cancelled. Status includes active/enabled/loading flags, the current and
+requested preset, errors, outputs, and parameter metadata.
+Each output object contains id, name, shaderEnabled, colorEnabled, gamma,
+saturation, shaderActive, and colorActive. The active flags reflect current
+processing, including master bypass and neutral color settings.
+
+Configuration is stored under $XDG_CONFIG_HOME (normally ~/.config):
+waylandshaderrc stores preset/settings data, and kwinrc stores the standard
+waylandshaderEnabled plugin preference. The control interface is
+org.waylandshader.Effect at /WaylandShader on the org.kde.KWin session service.
+
+Development and regression checks
+---------------------------------
+
+    nix-shell
+    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DCMAKE_INSTALL_PREFIX="$PWD/build/install" \
+      -DWAYLANDSHADER_BUILD_TESTS=ON
+    cmake --build build --parallel
+    ctest --test-dir build --output-on-failure
+
+The optional tests execute real shader rendering, not a mocked GL runtime.
+They cover multipass/LUT/mipmap results, independent output histories,
+feedback/history resets, repeated loads, live parameter changes, the decimal
+0.1 parameter boundary, and restoration of the caller's GL context/state.
+Both normal and robust EGL hosts are exercised, along with the OpenGL 3.3
+fallback. Mesa surfaceless EGL is required; its absence is reported as a skip.
+These tests do not load a plugin into the desktop. C++ sources use clang-format's
+WebKit style.
+
+Verified native behavior
+------------------------
+
+Verification used a separate two-output nested KWin 6.6.6 Wayland session on
+Mesa with an AMD Radeon RX 6800 XT; its D-Bus and configuration directories were
+isolated from the main Plasma session. Actual native application surfaces and
+the settings window were rendered and inspected, not just successful build or
+D-Bus replies. Checks included:
+
+* The upstream libretro crt/crt-easymode.slangp preset on both outputs, upright
+  presentation, and automatic preset restoration after restarting that session.
+* Native text entry and button clicks beneath the effect using KWin's EIS input
+  interface, plus actual settings-window checkbox, preset, and parameter edits.
+* Exact unchanged RGB samples with an identity shader and expected inverted RGB
+  samples after a live parameter change. Those samples remained filtered after
+  a deliberately broken replacement preset was rejected.
+* Output resizing, fractional scale changes, and output disable/re-enable,
+  retaining parameter settings and returning to active processing.
+* Per-monitor shader selection and independent gamma/saturation, comparing
+  rendered RGB samples against the expected color transform. Color-only startup,
+  monitor profile restoration, and master bypass/re-enable were exercised.
+* Valid presets and parameter edits with every shader monitor deselected,
+  subsequent rendering after reselection, and rejection of a broken preset
+  without replacing the previous working preset.
+* Native monitor-selector, shader/color checkbox, gamma, and saturation edits.
+  Focused uncommitted text survived status refresh; removing the selected monitor
+  did not commit that text to another monitor, including after reconnection.
+* Separate GPU probes for shared-resource cleanup across repeated load/free
+  cycles, in addition to the retained temporal/context regressions.
+
+Limits and risks
+----------------
+
+* Only KDE Plasma/KWin 6.6 is implemented. This does not add support to niri,
+  COSMIC, or GNOME, and it does not implement per-window or selected-region
+  processing.
+* Shaders alter pixels, not input hit-testing. A curved or geometrically warped
+  desktop still uses the application's original mouse coordinates. Prefer
+  non-warping shaders for precise desktop interaction.
+* The shader input is SDR sRGB; this is not an HDR-preserving shader pipeline.
+  HDR/wide-gamut correctness and physical-monitor rotation have not been
+  validated. A cursor drawn separately from the scene is not necessarily shaded.
+  Gamma/saturation are software SDR adjustments, not ICC calibration or
+  hardware gamma-ramp controls.
+* Outputs running a Slang preset repaint continuously, including otherwise idle
+  desktops, because temporal shaders require frames. Color-only processing does
+  not request continuous animation. Processing adds GPU work and prevents direct
+  scanout on affected outputs; no latency, power, VRR, or all-preset compatibility
+  claim is made. Very expensive presets can still make the desktop slow.
+* Shader compilation is off the compositor thread, but GPU rendering remains
+  in KWin's process. Native plugin/driver faults can affect the session. Test
+  unfamiliar presets and changes in a nested session before using them daily.
+* Some CRT presets assume a low-resolution source. For example, crt-easymode's
+  default scanline cutoff can suppress scanlines at desktop resolutions; inspect
+  the preset's parameters rather than assuming the shader did not load.
+
+Why the original capture-overlay proposal was not used
+-----------------------------------------------------
+
+A portable capture viewer and an in-place desktop effect are different products.
+Portal ScreenCast plus PipeWire is useful for a separate viewer, but does not
+universally replace a compositor's displayed output. Capturing a monitor and
+placing its filtered copy over that monitor can capture the copy again.
+DMA-BUF does not prevent this feedback loop or guarantee lower latency or
+zero-copy imports on every driver/format combination.
+
+DMA-BUF import requires format/modifier negotiation, plane layouts, compatible
+GPU allocation, and producer/consumer synchronization. Shared-memory fallback
+support depends on the capture backend. Portal permission persistence and
+available source types also depend on backend/version.
+
+An empty Wayland input region controls pointer/touch hit-testing, not keyboard
+focus. Layer-shell requires separate keyboard-interactivity policy, is not
+universal, and does not supply generic foreign-window tracking. The relevant
+new capture family is ext-image-copy-capture; there is no universal
+"ext-screencopy" or "ext-layer-shell" solution.
+
+For future in-place integrations: niri and COSMIC need compositor-specific
+rendering changes or suitable upstream hooks for persistent preset processing.
+GNOME needs a Shell/Mutter integration; a single Clutter/Cogl GLSL snippet is
+not equivalent to a complete RetroArch multipass preset runtime. Those are
+separate native backends, not hidden portability supplied by this KWin plugin.
+
+Primary references
+------------------
+
+librashader runtime and compatibility notes:
+https://github.com/SnowflakePowered/librashader
+https://github.com/SnowflakePowered/librashader/blob/master/BROKEN_SHADERS.md
+RetroArch shader collection (each preset retains its own license):
+https://github.com/libretro/slang-shaders
+KWin 6.6 source/API:
+https://github.com/KDE/kwin/tree/v6.6.6
+Portal ScreenCast contract:
+https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.ScreenCast.html
+PipeWire DMA-BUF sharing and synchronization:
+https://docs.pipewire.org/devel/page_dma_buf.html
+Wayland surface input-region semantics:
+https://wayland.freedesktop.org/docs/html/apa.html#protocol-spec-wl_surface-request-set_input_region
+Persistent shader integration in niri:
+https://github.com/niri-wm/niri/issues/913
+COSMIC compositor:
+https://github.com/pop-os/cosmic-comp
+GNOME Shell effect API changes:
+https://gjs.guide/extensions/upgrading/gnome-shell-51.html

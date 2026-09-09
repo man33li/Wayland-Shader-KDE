@@ -1,0 +1,12 @@
+{
+  "KPlugin": {
+    "Id": "waylandshader",
+    "Name": "WaylandShader",
+    "Description": "Apply RetroArch shaders and color adjustments to selected monitors",
+    "Icon": "video-display",
+    "Category": "Appearance",
+    "EnabledByDefault": false,
+    "Version": "0.1.0"
+  },
+  "X-KDE-Ordering": 1
+}
