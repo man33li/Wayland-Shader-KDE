@@ -6,7 +6,7 @@
 
 **Status recorded on 2026-09-11:** implemented for GNOME Shell/Mutter **50**, specifically built and exercised with **50.4 / Mutter ABI 18**. This is a native stage effect, not a capture-overlay application. GNOME 51, other Mutter ABI majors, GLES, and GLX are not supported by this backend's current guards.
 
-The owning checkout is `gnome-backend`, locally `/home/knd/AI/WaylandShader-gnome`. Commit `e1bcfc0` records the first GNOME implementation. Subsequent bypass-parameter and GTK-picker fixes were observed and implemented in the working tree on 2026-09-11; do not pretend they have separate published commits. No published `gnome-backend` reference was returned during the documentation inventory. The source paths below are relative to that checkout, not to every branch carrying this documentation.
+The owning checkout is `gnome-backend`, locally `/home/knd/AI/WaylandShader-gnome`. Commit `e1bcfc0` records the first GNOME implementation; `f8fbbe8` (2026-09-11, “Fixed file Browser and implemented”) commits the bypass-parameter and GTK-picker fixes described below together with this documentation. The branch had no upstream ref when this was written. The source paths below are relative to that checkout, not to every branch carrying this documentation.
 
 | Piece | Source | Responsibility |
 | --- | --- | --- |

@@ -15,7 +15,7 @@ One git repository, three checked-out branches (`git worktree list`):
 | Version | Branch, local worktree | Revision documented | Status | Package entry point |
 | --- | --- | --- | --- | --- |
 | KDE Plasma / KWin 6.6 | `main`, `/home/knd/AI/WaylandShader` | `514b06c` | Implemented; real-GL regressions and isolated two-output native checks recorded | `default.nix` (private shader library inline) |
-| GNOME Shell / Mutter 50 (ABI 18) | `gnome-backend`, `/home/knd/AI/WaylandShader-gnome` | `e1bcfc0` plus uncommitted working-tree fixes dated 2026-09-11 | Implemented; installed on this host through the `waylandshader-gnome` input; native checks in disposable Shell sessions and a physical KMS-scanout check recorded | `gnome/default.nix`; the branch's `default.nix` still builds KWin |
+| GNOME Shell / Mutter 50 (ABI 18) | `gnome-backend`, `/home/knd/AI/WaylandShader-gnome` | `f8fbbe8` (`e1bcfc0` first take, then the 2026-09-11 bypass-validation and GTK-picker fixes committed together with this documentation) | Implemented; installed on this host through the `waylandshader-gnome` input; native checks in disposable Shell sessions and a physical KMS-scanout check recorded | `gnome/default.nix`; the branch's `default.nix` still builds KWin |
 | niri | `niri-backend`, `/home/knd/AI/WaylandShader-niri` | `6579b80` (identical to the KWin baseline) | Not implemented; renderer research, a GLES-versus-desktop-GL bridge probe and stock nested niri launches survive in a private handoff archive | none for niri; `default.nix` there builds the KWin package |
 
 Shared by every version, byte-identical or branch-adapted:
@@ -45,8 +45,8 @@ Dates are commit dates or recorded session dates; the granularity is coarse beca
 | 2026-09-10 | `c2fec31` idle-scheduling proposal (document only) | `git log main` |
 | 2026-09-11 | `514b06c` evaluation of that proposal: rendered counterexamples, optimization **not** applied | `performance-enhancer-evaluation.md` |
 | 2026-09-11 | GLF-OS module switched to install the GNOME package when the desktop is GNOME; stale user-local extension removed; fresh-session discovery | `/etc/nixos/customConfig/waylandshader.nix`, [GNOME chapter](docs/GNOME.md) |
-| 2026-09-11 | Bypassed-parameter validation fix and GTK file-picker runtime fix in the GNOME working tree; retained `gnome/tests/parameter-bypass.js` | uncommitted `gnome-backend` changes, [GNOME chapter](docs/GNOME.md) |
-| 2026-09-11 | This documentation set | `docs/`, this file |
+| 2026-09-11 | Bypassed-parameter validation fix and GTK file-picker runtime fix on `gnome-backend`; retained `gnome/tests/parameter-bypass.js` | `f8fbbe8` “Fixed file Browser and implemented”, [GNOME chapter](docs/GNOME.md) |
+| 2026-09-11 | This documentation set committed on all three branches | `50de0db` (`main`), `f8fbbe8` (`gnome-backend`, same commit as the fixes), `f4b9b15` (`niri-backend`) |
 
 The pattern that repeats across versions:
 
@@ -131,7 +131,7 @@ Open for every version: physical HDR/wide-gamut, rotation, hotplug/load races, l
 Ordered by dependency, not by appeal.
 
 1. **Compiled-runtime temporal metadata before any idle-scheduling optimization.** All backends currently self-schedule every selected Slang chain. The stable librashader C API does not expose the reflection needed; the private patch is the place to add a query. Unknown must stay continuous. Then gate self-scheduling per output in KWin `postPaintScreen()` / GNOME per-view timelines without touching damage expansion or invalidation. Details: [KDE §6](docs/KDE.md#6-future-refinements-correct-scheduling-before-performance-claims), [GNOME](docs/GNOME.md#future-refinements).
-2. **Commit and publish the GNOME working-tree fixes.** `gnome-backend` carries the bypass-validation and GTK-picker changes uncommitted; no published `gnome-backend` ref was found during inventory.
+2. **Publish `gnome-backend`.** The bypass-validation and GTK-picker fixes are committed locally as `f8fbbe8`, but the branch has no upstream ref; `main` and `niri-backend` are ahead of `origin` by their documentation commits.
 3. **Unify the private-library packaging.** Move `main`'s inline derivation to `shader-library.nix` so both branches diff cleanly and a librashader bump is one change.
 4. **Physical validation matrix** on representative hardware for both implemented backends: HDR/wide-gamut with real presets, rotation, hotplug during compilation, lock/unlock with temporal history, suspend/resume, VRR, latency, idle/active power. Record method, versions, preset and baseline for each measurement.
 5. **niri native backend** following the gates in the [niri chapter](docs/NIRI.md#6-proposed-native-implementation-sequence-and-readiness-gates): pinned CachyOS baseline, reproducible probe, one final-output seam on both nested and DRM paths, per-output lifecycle, atomic replacement, damage/temporal scheduling with commit-generation advance, lock safety, then packaging.
@@ -178,7 +178,7 @@ Include: branch and revision (`git rev-parse HEAD`, working-tree status), compos
 
 ## 8. Evidence and references
 
-- Repository: [`main`](https://github.com/man33li/Wayland-Shader-KDE/tree/main), [`gnome-backend` package path](https://github.com/man33li/Wayland-Shader-KDE/tree/gnome-backend), [`niri-backend` at `6579b80`](https://github.com/man33li/Wayland-Shader-KDE/tree/6579b80e3cc7dd04ae3fd04f74c27fca5c8136bd). The GNOME link is the URL recorded in the extension metadata; no published `gnome-backend` ref was confirmed during inventory.
+- Repository: [`main`](https://github.com/man33li/Wayland-Shader-KDE/tree/main), [`gnome-backend` package path](https://github.com/man33li/Wayland-Shader-KDE/tree/gnome-backend), [`niri-backend` at `6579b80`](https://github.com/man33li/Wayland-Shader-KDE/tree/6579b80e3cc7dd04ae3fd04f74c27fca5c8136bd). The GNOME link is the URL recorded in the extension metadata; the local `gnome-backend` branch had no upstream ref when this was written.
 - Local host wiring: `/etc/nixos/flake.nix` (inputs `waylandshader`, `waylandshader-gnome`), `/etc/nixos/customConfig/waylandshader.nix` (desktop-based selection), `~/system-flake.nix` (re-merge source when GLF migrations drop custom inputs).
 - Upstream: [librashader](https://github.com/SnowflakePowered/librashader), [KWin](https://invent.kde.org/plasma/kwin), [Mutter](https://gitlab.gnome.org/GNOME/mutter), [GNOME Shell](https://gitlab.gnome.org/GNOME/gnome-shell), [niri](https://github.com/niri-wm/niri), [Smithay](https://github.com/Smithay/smithay), [Extra CMake Modules `KDECMakeSettings`](https://api.kde.org/ecm/kde-module/KDECMakeSettings.html).
 - Project records on `main`: `README.md`, `WaylandShader-Guide.txt`, `TODO.md`, `proposed-perfomance-enhancer.md`, `performance-enhancer-evaluation.md`.
