@@ -4,7 +4,7 @@ Native RetroArch Slang shader effects for the Wayland desktop, with per-monitor 
 
 WaylandShader processes the desktop **inside the compositor**. It is not a Wine application, a screen-capture viewer, or an overlay window. The current implementation is a **KDE Plasma / KWin effect**.
 
-[Detailed guide](WaylandShader-Guide.txt) · [Project roadmap](TODO.md)
+[Detailed guide](WaylandShader-Guide.txt) · [Project roadmap](TODO.md) · [Project handbook](PROJECT-HANDBOOK.md) · Backend chapters: [KDE](docs/KDE.md), [GNOME](docs/GNOME.md), [niri](docs/NIRI.md)
 
 ## Current status
 
